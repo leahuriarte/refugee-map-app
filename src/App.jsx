@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, GeoJSON, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet';
 import { scaleQuantize } from 'd3-scale';
 import _ from 'lodash';
 import 'leaflet/dist/leaflet.css';
 
 const App = () => {
   const [refugeeData, setRefugeeData] = useState([]);
-  const [year, setYear] = useState(2022);
+  const [year, setYear] = useState(2024);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [worldGeoJSON, setWorldGeoJSON] = useState(null);
   const [maxRefugees, setMaxRefugees] = useState(1000000);
+  const [dataSource, setDataSource] = useState('api'); // 'api' or 'fallback'
 
-  // Color scale for the map
+  // Color scale for the map - will be updated when data loads
   const colorScale = scaleQuantize()
     .domain([0, maxRefugees])
     .range([
@@ -34,58 +35,80 @@ const App = () => {
       });
   }, []);
 
+  // No fallback data - we'll be honest when the API fails
+
   // Load refugee data
   useEffect(() => {
-
-
-const fetchData = async () => {
-  try {
-    setLoading(true);
-    
-    // construct the api url with query parameters
-    const apiUrl = `https://api.unhcr.org/population/v1/population/?year=${year}&coa_all=true`;
-    
-    const response = await fetch(apiUrl);
-    
-    if (!response.ok) {
-      throw new Error(`api request failed: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    // process the api response
-    const formattedData = data.items.map(item => ({
-      coa: item.coa_iso,
-      refugees: item.refugees || 0,
-      year: item.year,
-      country: item.coa_name
-    })).filter(item => item.refugees > 0);
-    
-    setRefugeeData(formattedData);
-    
-    // find max for color scaling
-    const max = Math.max(...formattedData.map(d => d.refugees));
-    setMaxRefugees(max);
-    
-    setLoading(false);
-  } catch (error) {
-    console.error("Error fetching refugee data:", error);
-    setError("Failed to load refugee data. Check console for details.");
-    setLoading(false);
-  }
-};
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Construct the API URL with query parameters
+        const apiUrl = `https://api.unhcr.org/population/v1/population/?year=${year}&coa_all=true`;
+        
+        const response = await fetch(apiUrl, { 
+          // Adding timeout to prevent long waiting
+          signal: AbortSignal.timeout(5000)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Process the API response
+        const formattedData = data.items.map(item => ({
+          coa: item.coa_iso,
+          refugees: item.refugees || 0,
+          year: item.year,
+          country: item.coa_name
+        })).filter(item => item.refugees > 0);
+        
+        if (formattedData.length === 0) {
+          throw new Error("No refugee data returned from API");
+        }
+        
+        setRefugeeData(formattedData);
+        setDataSource('api');
+        
+        // Find max for color scaling
+        const max = Math.max(...formattedData.map(d => d.refugees));
+        setMaxRefugees(max);
+        
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching refugee data:", error);
+        
+        // No fallback - just be honest about the error
+        setRefugeeData([]);
+        setDataSource('none');
+        setMaxRefugees(0);
+        
+        setError("couldn't load refugee data from UNHCR API");
+        setLoading(false);
+      }
+    };
 
     fetchData();
   }, [year]);
 
   // Style function for GeoJSON features
   const countryStyle = (feature) => {
+    const countryCode = feature.properties.iso_a3;
     const countryName = feature.properties.name;
+    
+    // Try to match by ISO code first, then by name with special cases
     const countryData = refugeeData.find(d => 
-          d.country === countryName || 
-          d.country.includes(countryName) || 
-          countryName.includes(d.country)
-        );
+      d.coa === countryCode || 
+      d.country === countryName || 
+      d.country.includes(countryName) || 
+      countryName.includes(d.country) ||
+      // Special case for Turkey/Türkiye/Turkiye
+      (countryName === "Turkey" && (d.country === "Türkiye" || d.country === "Turkiye")) ||
+      (countryName === "Türkiye" && (d.country === "Turkey" || d.country === "Turkiye")) ||
+      (countryName === "Turkiye" && (d.country === "Turkey" || d.country === "Türkiye"))
+    );
     
     return {
       fillColor: countryData ? colorScale(countryData.refugees) : '#F5F4F6',
@@ -98,8 +121,20 @@ const fetchData = async () => {
 
   // Handle feature click events
   const onEachFeature = (feature, layer) => {
+    const countryCode = feature.properties.iso_a3;
     const countryName = feature.properties.name;
-    const countryData = refugeeData.find(d => d.country === countryName);
+    
+    // Try to match by ISO code first, then by name with special cases
+    const countryData = refugeeData.find(d => 
+      d.coa === countryCode || 
+      d.country === countryName || 
+      d.country.includes(countryName) || 
+      countryName.includes(d.country) ||
+      // Special case for Turkey/Türkiye/Turkiye
+      (countryName === "Turkey" && (d.country === "Türkiye" || d.country === "Turkiye")) ||
+      (countryName === "Türkiye" && (d.country === "Turkey" || d.country === "Turkiye")) ||
+      (countryName === "Turkiye" && (d.country === "Turkey" || d.country === "Türkiye"))
+    );
     
     if (countryData) {
       layer.bindTooltip(
@@ -138,11 +173,11 @@ const fetchData = async () => {
               onChange={handleYearChange}
               className="p-2 border rounded"
             >
+              <option value="2024">2024</option>
+              <option value="2023">2023</option>
               <option value="2022">2022</option>
               <option value="2021">2021</option>
               <option value="2020">2020</option>
-              <option value="2019">2019</option>
-              <option value="2018">2018</option>
             </select>
           </div>
           <div className="flex items-center">
@@ -163,13 +198,15 @@ const fetchData = async () => {
           </div>
         </div>
 
+        {error && (
+          <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-700">
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
+
         {loading || !worldGeoJSON ? (
           <div className="flex justify-center items-center h-96">
             <p>loading map data...</p>
-          </div>
-        ) : error ? (
-          <div className="flex justify-center items-center h-96">
-            <p className="text-red-500">{error}</p>
           </div>
         ) : (
           <div style={{ height: "500px", width: "100%" }}>
@@ -195,7 +232,7 @@ const fetchData = async () => {
       </div>
 
       <div className="w-full max-w-6xl bg-white rounded-lg shadow-md p-4 mb-6">
-        <h2 className="text-xl font-semibold mb-3">top refugee hosting countries</h2>
+        <h2 className="text-xl font-semibold mb-3">top refugee hosting countries ({year})</h2>
         <div className="overflow-x-auto">
           <table className="min-w-full table-auto">
             <thead>
@@ -217,8 +254,10 @@ const fetchData = async () => {
       </div>
 
       <footer className="w-full max-w-6xl text-center text-gray-500 text-sm py-4">
-        <p>data source: UN refugee statistics api (UNHCR)</p>
-        <p className="mt-1">note: this visualization uses mock data for demonstration. in production, connect to the actual UNHCR api.</p>
+        <p>data source: {dataSource === 'api' ? 'UN refugee statistics API (UNHCR)' : 'no data available'}</p>
+        {dataSource === 'none' && (
+          <p className="mt-1">note: failed to load data from UNHCR API.</p>
+        )}
       </footer>
     </div>
   );
