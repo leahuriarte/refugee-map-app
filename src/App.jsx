@@ -94,33 +94,34 @@ const App = () => {
     fetchData();
   }, [year]);
 
-  // Style function for GeoJSON features
-  const countryStyle = (feature) => {
-    const countryCode = feature.properties.iso_a3;
-    const countryName = feature.properties.name;
-    
-    // Try to match by ISO code first, then by name with special cases
-    const countryData = refugeeData.find(d => 
-      d.coa === countryCode || 
-      d.country === countryName || 
-      d.country.includes(countryName) || 
-      countryName.includes(d.country) ||
-      // Special case for Turkey/Türkiye/Turkiye
-      (countryName === "Turkey" && (d.country === "Türkiye" || d.country === "Turkiye")) ||
-      (countryName === "Türkiye" && (d.country === "Turkey" || d.country === "Turkiye")) ||
-      (countryName === "Turkiye" && (d.country === "Turkey" || d.country === "Türkiye"))
-    );
-    
-    const isSelected = selectedCountry?.coa === countryData?.coa;
-    
-    return {
-      fillColor: countryData ? colorScale(countryData.refugees) : '#F5F4F6',
-      weight: isSelected ? 2 : 1,
-      opacity: 1,
-      color: isSelected ? '#FFC904' : 'white',
-      fillOpacity: isSelected ? 0.9 : 0.7
-    };
+// Fixed countryStyle function
+const countryStyle = (feature) => {
+  const countryCode = feature.properties.iso_a3;
+  const countryName = feature.properties.name;
+  
+  // Try to match by ISO code first, then by name with special cases
+  const countryData = refugeeData.find(d => 
+    d.coa === countryCode || 
+    d.country === countryName || 
+    d.country.includes(countryName) || 
+    countryName.includes(d.country) ||
+    // Special case for Turkey/Türkiye/Turkiye
+    (countryName === "Turkey" && (d.country === "Türkiye" || d.country === "Turkiye")) ||
+    (countryName === "Türkiye" && (d.country === "Turkey" || d.country === "Turkiye")) ||
+    (countryName === "Turkiye" && (d.country === "Turkey" || d.country === "Türkiye"))
+  );
+  
+  // Only consider a country selected if both countryData exists and its coa matches selectedCountry
+  const isSelected = countryData && selectedCountry && countryData.coa === selectedCountry.coa;
+  
+  return {
+    fillColor: countryData ? colorScale(countryData.refugees) : '#F5F4F6',
+    weight: isSelected ? 2 : 1,
+    opacity: 1,
+    color: isSelected ? '#FFC904' : 'white',
+    fillOpacity: isSelected ? 0.9 : 0.7
   };
+};
 
   // Handle feature click events
   const onEachFeature = (feature, layer) => {
