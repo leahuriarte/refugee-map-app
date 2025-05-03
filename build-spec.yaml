@@ -2,4 +2,5 @@ buildpacks:
   - name: nodejs
     options:
       node_version: 16.x
-      npm_install_args: --legacy-peer-deps --no-package-lock
+      npm_install_args: --legacy-peer-deps --no-package-lock --force
+      npm_ci: false
