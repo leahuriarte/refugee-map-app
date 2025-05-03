@@ -2,16 +2,6 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Polyfill for crypto
-import crypto from 'crypto';
-if (typeof global.crypto === 'undefined') {
-  global.crypto = {
-    getRandomValues: function(buffer) {
-      return crypto.randomFillSync(buffer);
-    }
-  };
-}
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
